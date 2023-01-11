@@ -1,11 +1,13 @@
-import {BlendMode, Canvas, CanvasKit} from "canvaskit-wasm"
+import {BlendMode, Canvas, Surface} from "canvaskit-wasm"
+import { CKRoot } from "../package/canvaskit"
 import { Color } from "../utils/SkiaElementMapping"
 
 export type ElementProps = {
-  canvasKit: CanvasKit
+  ckRoot: CKRoot
+  children?: CKElement<ElementProps>[]
 }
 
-export abstract class CKElement {
+export abstract class CKElement<T extends ElementProps> {
   readonly type: 'paint' |
     'group' |
     'canvas' |
@@ -15,10 +17,17 @@ export abstract class CKElement {
     'circle' |
     'image' |
     undefined
-  readonly canvasKit: CanvasKit | undefined
+  ckRoot: CKRoot
   canvas: Canvas | undefined
+  skSurface?: Surface | undefined
+  props: T
 
-  abstract render(param: this): void
+  constructor(props: T) {
+    this.props = props
+    this.ckRoot = props.ckRoot
+  }
+
+  abstract render(parent: any): void
 }
 
 export enum TextDirectionEnum {
@@ -332,6 +341,6 @@ export enum TextAlignEnum {
 
 export type ASTItem = {
   type: string
-  props: Record<string, any>
+  props: any
   children?: ASTItem[]
 }

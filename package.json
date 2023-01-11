@@ -16,6 +16,14 @@
     "vite": "^4.0.0"
   },
   "dependencies": {
-    "canvaskit-wasm": "^0.37.2"
+    "@skeditor/canvaskit-wasm": "^0.28.1",
+    "@sketch-hq/sketch-file-format-ts": "^6.4.0",
+    "@types/lodash": "^4.14.191",
+    "bowser": "^2.11.0",
+    "canvaskit-wasm": "^0.37.2",
+    "jszip": "^3.10.1",
+    "loadsh": "^0.0.4",
+    "pixi.js": "^7.0.5",
+    "rxjs": "6.2.1"
   }
 }
