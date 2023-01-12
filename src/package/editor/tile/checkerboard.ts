@@ -1,4 +1,4 @@
-import { Rect } from '../base/rect'
+import { Rect } from '../base'
 import { TileBounds, floorBinaryScale, Tile, Priority } from './tile'
 
 import sk, { newStrokePaint } from '../util/canvaskit'

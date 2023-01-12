@@ -18,7 +18,7 @@ const Header: React.FC<Props> = (props) => {
   return <div className=" border-b-gray-100 border-b-2 h-12 flex items-center pl-1 pr-1">
     <div className={'flex gap-2'}>
       {iconButtons.map((item, index) => {
-        return <div onClick={item.handle} className={'flex items-center justify-end align-middle w-8'} key={index} title={item.title}>
+        return <div onClick={item.handle} className={'flex items-center justify-end align-middle w-8 hover:bg-blue-500 cursor-pointer h-8 rounded'} style={{color: '#fff'}} key={index} title={item.title}>
           {item.icon}
           <div className={'w-2'}></div>
         </div>

@@ -12,7 +12,7 @@ export class OverlayView extends SkyBaseView {
   private topRuler: Ruler
   private leftRuler: Ruler
   private corner: CornerView
-  private selectionView?: SelectionView
+  selectionView?: SelectionView
   public artBoardOverlays: ArtBoardOverlayView[] = []
   private hoverOverlay?: SelectionView
 

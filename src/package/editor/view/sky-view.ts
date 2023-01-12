@@ -303,7 +303,7 @@ export class SkyView extends Disposable {
   // 重新绘制
   render() {
     if (!this.dirty) return
-
+    console.log(this.pageView,'isOutlineExpanded')
     this.createSkSurfaceAndCanvas()
     if (!this.skSurface) return
     this.skCanvas.clear(sk.CanvasKit.TRANSPARENT)

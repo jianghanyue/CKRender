@@ -1,4 +1,4 @@
-import { Disposable } from '../base'
+import {Disposable, Point, Rect} from '../base'
 import {
   SkyArtboardView,
   SkyBaseLayerView,
@@ -7,10 +7,25 @@ import {
   SkySymbolInstanceView,
   SkyView,
 } from '../view'
-import { fromEvent } from 'rxjs'
-import { Point } from '../base'
-import { ClassValue } from '../model'
-import { throttleTime } from 'rxjs/operators'
+import {fromEvent} from 'rxjs'
+import {ClassValue} from '../model'
+import {throttleTime} from 'rxjs/operators'
+
+export type DragDirectionType = 'left' | 'right' | 'top' | 'bottom' | 'topLeft' | 'topRight' | 'bottomLeft' | 'bottomRight' | ''
+
+export const pointIndexToDirection: Record<number, DragDirectionType> = {
+  0: 'topLeft',
+  1: 'topRight',
+  2: 'bottomLeft',
+  3: 'bottomRight',
+}
+
+export const lineIndexToDirection: Record<number, DragDirectionType> = {
+  0: 'top',
+  1: 'right',
+  2: 'bottom',
+  3: 'left',
+}
 
 export class PointerController extends Disposable {
   selectedView: SkyBaseLayerView | undefined
@@ -45,38 +60,92 @@ export class PointerController extends Disposable {
       //     event.preventDefault();
       //   })
       // );
-
       this._disposables.push(fromEvent(canvasEl, 'click').subscribe(this.onClick))
     })
   }
 
-  private isDeepKey(event: MouseEvent) {
+  private static isDeepKey(event: MouseEvent) {
+    console.log(event.metaKey || event.ctrlKey)
     return event.metaKey || event.ctrlKey
   }
 
   onClick = (_event: Event) => {
     const event = _event as MouseEvent
+    const { offsetX, offsetY } = event
+    const pt = new Point(offsetX, offsetY)
 
-    const targetView = this.findViewFromEvent(event)
+    const selectedBox = this.findSelectedBox(pt)
+
+    if (selectedBox) {
+      return
+    }
+
+    const targetView = this.findViewFromEvent(event, pt)
     this.view.selectLayer(targetView?.model)
   }
 
   onHover(event: MouseEvent) {
-    const targetView = this.findViewFromEvent(event)
-    this.view.hoverLayer(targetView?.model)
-  }
-
-  findViewFromEvent(event: MouseEvent) {
     const { offsetX, offsetY } = event
     const pt = new Point(offsetX, offsetY)
 
+    const selectedBox = this.findSelectedBox(pt)
+    const canvasHTML = this.view.canvasEl$.getValue()
+
+    if (!canvasHTML) throw Error('canvasHTML is not find')
+    if (selectedBox) {
+      canvasHTML.style.cursor = this.view.overlayView.selectionView?.cursorStyle || 'auto'
+      return
+    } else {
+      canvasHTML.style.cursor = 'auto'
+    }
+
+    const targetView = this.findViewFromEvent(event, pt)
+    this.view.hoverLayer(targetView?.model)
+  }
+
+  findSelectedBox = (pt: Point) => {
+    const selectionView = this.view.overlayView.selectionView
+    const actualFrame = selectionView?.actualFrame
+    if (selectionView) {
+      for (let i = 0; i < selectionView.pointRect.length; i++) {
+        const item = selectionView.pointRect[i]
+        if (item.containsPoint(pt)) {
+          selectionView.dragDirection = pointIndexToDirection[i]
+          return item
+        }
+      }
+    }
+    if (actualFrame) {
+      const base = 5
+      const area = [
+        new Rect(actualFrame.x, actualFrame.y - base, actualFrame.width, base * 2),
+        new Rect(actualFrame.right - base, actualFrame.y, base * 2, actualFrame.height),
+        new Rect(actualFrame.x, actualFrame.bottom - base, actualFrame.width, base * 2),
+        new Rect(actualFrame.left - base, actualFrame.y, base * 2, actualFrame.height),
+      ]
+      console.log(area,'actualFrame')
+
+      for (let i = 0; i < area.length; i++) {
+        const item = area[i]
+        if (item.containsPoint(pt)) {
+          selectionView.dragDirection = lineIndexToDirection[i]
+          return item
+        }
+      }
+    }
+
+    return null
+  }
+
+  findViewFromEvent(event: MouseEvent, pt: Point) {
+
+
     // const start = Date.now();
-    const targetView = this.findView(pt, this.isDeepKey(event))
     // const cost = Date.now() - start;
     // console.log('Find view', cost, offsetX, offsetY, targetView);
 
     // invariant(!(targetView instanceof SkyPageView), 'Cant select page view. It should be undefined')
-    return targetView
+    return this.findView(pt, PointerController.isDeepKey(event))
   }
 
   /**
@@ -94,7 +163,7 @@ export class PointerController extends Disposable {
       return foundArtBoard
     }
 
-    return deepest ? this.findViewDeep(pageView, pt) : this.findViewFirst(pageView, pt)
+    return deepest ? PointerController.findViewDeep(pageView, pt) : PointerController.findViewFirst(pageView, pt)
   }
 
   /**
@@ -110,7 +179,7 @@ export class PointerController extends Disposable {
     return null
   }
 
-  private findViewFirst(pageView: SkyPageView, pt: Point) {
+  private static findViewFirst(pageView: SkyPageView, pt: Point) {
     for (let i = pageView.children.length - 1; i >= 0; i--) {
       const layer = pageView.children[i]
       const type = layer.model._class
@@ -134,7 +203,7 @@ export class PointerController extends Disposable {
     return undefined
   }
 
-  private findViewDeep(pageView: SkyPageView, pt: Point) {
+  private static findViewDeep(pageView: SkyPageView, pt: Point) {
     let curLayer: SkyBaseLayerView = pageView
 
     while (curLayer.children.length > 0) {

@@ -61,7 +61,7 @@ export function getFontMgr() {
   }
   console.log(import.meta.env)
   return Promise.all(
-    defaultFontFiles.map((filename) => fetch(import.meta.env.VITE_PUBLIC_PATH + filename).then((res) => res.arrayBuffer()))
+    defaultFontFiles.map((filename) => fetch((import.meta.env.VITE_PUBLIC_PATH || '/') + filename).then((res) => res.arrayBuffer()))
   ).then((fonts) => {
     fonts.forEach((font) => {
       const hFont = new sk.CanvasKit.Font((sk.CanvasKit.FontMgr.RefDefault() as any).MakeTypefaceFromData(font), 72)
@@ -83,7 +83,7 @@ export function getFontProvider() {
 
 function prefetchFonts() {
   defaultFontFiles.forEach((filename, idx) => {
-    Promise.all([fetch(import.meta.env.VITE_PUBLIC_PATH + filename), CanvaskitPromised])
+    Promise.all([fetch((import.meta.env.VITE_PUBLIC_PATH || '/') + filename), CanvaskitPromised])
       .then(([res]) => res.arrayBuffer())
       .then((buffer) => {
         const fontName = defaultFonts[idx]

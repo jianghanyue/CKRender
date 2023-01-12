@@ -1,20 +1,20 @@
-import { Subscription } from 'rxjs';
+import { Subscription } from 'rxjs'
 
 export class Disposable {
-  protected _disposables: ((() => void) | Subscription | Disposable)[] = [];
-  protected _disposed = false;
+  protected _disposables: ((() => void) | Subscription | Disposable)[] = []
+  protected _disposed = false
 
   dispose() {
     this._disposables.forEach((fn) => {
       if (typeof fn === 'function') {
-        fn();
+        fn()
       } else if (fn instanceof Disposable) {
-        fn.dispose();
+        fn.dispose()
       } else {
-        fn.unsubscribe();
+        fn.unsubscribe()
       }
-    });
-    this._disposables.length = 0;
-    this._disposed = true;
+    })
+    this._disposables.length = 0
+    this._disposed = true
   }
 }
