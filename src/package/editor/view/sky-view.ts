@@ -283,7 +283,11 @@ export class SkyView extends Disposable {
    */
   private renderImmediately() {
     this.dirty = true
-    this.render()
+    if (this.pageView) {
+      this.pageView.enableTile = false
+      this.render()
+      this.pageView.enableTile = true
+    }
   }
 
   // 设置为当前使用的 canvas
@@ -303,7 +307,6 @@ export class SkyView extends Disposable {
   // 重新绘制
   render() {
     if (!this.dirty) return
-    console.log(this.pageView,'isOutlineExpanded')
     this.createSkSurfaceAndCanvas()
     if (!this.skSurface) return
     this.skCanvas.clear(sk.CanvasKit.TRANSPARENT)
@@ -417,41 +420,41 @@ export class SkyView extends Disposable {
     this.overlayView.addArtBoardOverlay(artBoardView)
   }
 
-  exportSelection() {
-    const view = this.pageState.selectedLayerView
-    if (!view) {
-      alert('Select a layer first.')
-      return
-    }
-
-    const img = this.renderView(view, 3)
-    if (img) {
-      this.getImgFromSkImage(img)
-    }
-  }
-
-  renderView(view: SkyBaseLayerView, scale: number) {
-    const frame = view.renderFrame
-
-    const surface = this.makeOffscreenSurface(frame.width * scale, frame.height * scale)
-    if (!surface) {
-      throw Error('surface is create fail')
-    }
-    const canvas = surface.getCanvas()
-    this.pushCanvas(canvas)
-    canvas.scale(scale, scale)
-    canvas.translate(-frame.x, -frame.y)
-
-    try {
-      view._render()
-    } finally {
-      this.popCanvas()
-    }
-
-    surface.flush()
-
-    return surface.makeImageSnapshot()
-  }
+  // exportSelection() {
+  //   const view = this.pageState.selectedLayerView
+  //   if (!view) {
+  //     alert('Select a layer first.')
+  //     return
+  //   }
+  //
+  //   const img = this.renderView(view, 3)
+  //   if (img) {
+  //     this.getImgFromSkImage(img)
+  //   }
+  // }
+  //
+  // renderView(view: SkyBaseLayerView, scale: number) {
+  //   const frame = view.renderFrame
+  //
+  //   const surface = this.makeOffscreenSurface(frame.width * scale, frame.height * scale)
+  //   if (!surface) {
+  //     throw Error('surface is create fail')
+  //   }
+  //   const canvas = surface.getCanvas()
+  //   this.pushCanvas(canvas)
+  //   canvas.scale(scale, scale)
+  //   canvas.translate(-frame.x, -frame.y)
+  //
+  //   try {
+  //     view._render()
+  //   } finally {
+  //     this.popCanvas()
+  //   }
+  //
+  //   surface.flush()
+  //
+  //   return surface.makeImageSnapshot()
+  // }
 
   getImgFromSkImage(image: SkImage) {
     if (!this.skSurface) return

@@ -1,8 +1,8 @@
-import { SketchFormat, SkySymbolMaster, SkyPage, SkImage, SkyStyle } from '.'
+import {SketchFormat, SkySymbolMaster, SkyPage, SkImage, SkyStyle} from '.'
 import JSZip from 'jszip'
-import { Subject } from 'rxjs'
+import {Subject} from 'rxjs'
 import sk from '../util/canvaskit'
-import { Disposable } from '../base'
+import {Disposable} from '../base'
 
 export class SkyModel extends Disposable {
   static currentContext: SkyModel
@@ -20,6 +20,7 @@ export class SkyModel extends Disposable {
   private foreignSymbols: SkySymbolMaster[] = []
 
   imageLoaded$ = new Subject()
+  redraw = new Subject()
 
   private imageCache = new Map<string, SkImage>()
 
@@ -31,7 +32,7 @@ export class SkyModel extends Disposable {
   // 初始化入口
   async readZipFile(zipFile: JSZip) {
     this.zipFile = zipFile
-    console.log(zipFile,'zipFile')
+    console.log(zipFile, 'zipFile')
     const docJson = await this.readJsonFile(zipFile, 'document.json')
 
     this.data = docJson
@@ -75,9 +76,20 @@ export class SkyModel extends Disposable {
   private async initPages() {
     for (const page of this.data.pages) {
       const pageJson = await this.readPageFileRefJson(page)
+      console.log(pageJson, 'initPages')
+      // pageJson.layers[0].backgroundColor = {
+      //   alpha: 1,
+      //   blue: 0,
+      //   green: 1,
+      //   red: 0,
+      //   _class: "color",
+      // }
       this.pages.push(new SkyPage().fromJson(pageJson))
     }
+
   }
+
+
 
   registerSymbol(id: string, symbol: SkySymbolMaster) {
     this.symbolRegistry.set(id, symbol)

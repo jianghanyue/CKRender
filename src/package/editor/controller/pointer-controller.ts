@@ -65,7 +65,6 @@ export class PointerController extends Disposable {
   }
 
   private static isDeepKey(event: MouseEvent) {
-    console.log(event.metaKey || event.ctrlKey)
     return event.metaKey || event.ctrlKey
   }
 
@@ -123,7 +122,6 @@ export class PointerController extends Disposable {
         new Rect(actualFrame.x, actualFrame.bottom - base, actualFrame.width, base * 2),
         new Rect(actualFrame.left - base, actualFrame.y, base * 2, actualFrame.height),
       ]
-      console.log(area,'actualFrame')
 
       for (let i = 0; i < area.length; i++) {
         const item = area[i]

@@ -1,17 +1,16 @@
-import { SkyModel, SkySymbolMaster, SkySymbolInstance, SketchFormat } from '.'
-import { Rect } from '../base'
-import { Point } from '../base'
+import {SketchFormat, SkyModel, SkySymbolInstance, SkySymbolMaster} from '.'
+import {Point, Rect} from '../base'
 import sk from '../util/canvaskit'
-import { sketchBlendToSk, sketchJoinStyleToSk, sketchStrokeCapToSk } from '../util/sketch-to-skia'
+import {sketchBlendToSk, sketchJoinStyleToSk, sketchStrokeCapToSk} from '../util/sketch-to-skia'
 import type {
   Canvas as SkCanvas,
-  Path as SkPath,
   Color as SkColor,
   Image as SkImage,
   Matrix3x3 as SkMatrix3x3,
   Paint as SkPaint,
   Paragraph as SkParagraph,
   ParagraphStyle as SkParagraphStyle,
+  Path as SkPath,
 } from '@skeditor/canvaskit-wasm'
 
 export const enum ClassValue {
@@ -279,6 +278,7 @@ export abstract class SkyBaseLayer<T extends SketchFormat.AnyLayer = SketchForma
   }
 }
 
+// const testSet = new Set()
 /**
  * group 基类，带有 children/layers
  */
@@ -308,6 +308,10 @@ export abstract class SkyBaseGroup<T extends SketchFormat.AnyGroup = SketchForma
 
   private buildLayers(layers: SketchFormat.AnyLayer[]) {
     layers.forEach((layer) => {
+      // testSet.add(layer._class)
+      // console.log(testSet,layer)
+      // if (layer._class === SketchFormat.ClassValue.Bitmap) {
+      // }
       switch (layer._class) {
         case SketchFormat.ClassValue.Group:
           return this.layers.push(new SkyGroup().fromJson(layer))
@@ -460,6 +464,7 @@ export class SkyBitmap extends SkyBaseLayer<SketchFormat.Bitmap> {
   file?: SkyFile
 
   async _fromJson(data: SketchFormat.Bitmap) {
+    console.log(data,'Bitmap')
     if (data.image) {
       this.file = new SkyFile().fromJson(data.image)
     }
@@ -469,7 +474,6 @@ export class SkyBitmap extends SkyBaseLayer<SketchFormat.Bitmap> {
 export class SkyFile extends SkyBaseObject<SketchFormat.FileRef | SketchFormat.DataRef> {
   readonly _class = 'file'
   // buffer?: ArrayBuffer;
-
   skImage?: SkImage
 
   fromJson(data: SketchFormat.FileRef | SketchFormat.DataRef) {
@@ -487,6 +491,12 @@ export class SkyFile extends SkyBaseObject<SketchFormat.FileRef | SketchFormat.D
     }
 
     return this
+  }
+
+  async asyncFromJson(data: SketchFormat.FileRef | SketchFormat.DataRef) {
+    this.skImage = await this.ctx.readImgFile(data._ref)
+    this.ctx.imageLoaded$.next()
+    return this.skImage
   }
 }
 
@@ -751,7 +761,7 @@ export class SkyFill extends SkyTintColorObject<SketchFormat.Fill> {
   patternTileScale = 0
   contextSettings = new SkyGraphicsContextSettings()
   _gradient?: SkyGradient
-  image?: SkyFile
+  image?: SketchFormat.Fill['image']
 
   fromJson(data: SketchFormat.Fill) {
     this.isEnabled = data.isEnabled
@@ -761,16 +771,13 @@ export class SkyFill extends SkyTintColorObject<SketchFormat.Fill> {
     this.noiseIntensity = data.noiseIntensity
     this.patternFillType = data.patternFillType
     this.patternTileScale = data.patternTileScale
+    this.image = data.image
     if (data.contextSettings) {
       this.contextSettings.fromJson(data.contextSettings)
     }
 
     if (data.gradient) {
       this._gradient = new SkyGradient().fromJson(data.gradient)
-    }
-
-    if (data.image) {
-      this.image = new SkyFile().fromJson(data.image)
     }
 
     return this

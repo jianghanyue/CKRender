@@ -9,7 +9,6 @@ export class SkySymbolInstanceView extends SkyBaseLayerView<SkySymbolInstance> {
 
   constructor(public model: SkySymbolInstance) {
     super(model)
-
     this.buildChildren(this.model.layers)
   }
 

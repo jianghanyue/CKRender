@@ -67,16 +67,19 @@ export class TileManager {
    * @param viewport viewport 已经是像素单位了, 只跟视口大小和 dpi 有关。
    */
   drawViewport(scale: number, viewport: Rect) {
+    console.log(this.caches,'this.caches')
     // 重新绘制的时候要重新计算哪些 tile 需要使用
     this.requiredTiles.length = 0
     this.raf.cancel()
-
     this.pyramid.drawViewport(scale, viewport)
-
     if (this.requiredTiles.length > 0) {
+      console.log(Object.values(this.caches.map))
+      console.table(this.requiredTiles)
+      console.log(this.requiredTiles,this.requiredTiles.length, 'this.requiredTiles')
       if (this.blockingMode) {
         this.scheduleWork()
       } else {
+        console.log(555)
         this.raf.execute(() => this.scheduleWork())
       }
     }
@@ -149,14 +152,14 @@ export class TileManager {
 
   fillTile(scale: number, xIdx: number, yIdx: number) {
     if (this.hasTile(scale, xIdx, yIdx)) return
-
+    console.log(scale, xIdx, yIdx,'fillTile')
     const ctx = this.ctx
 
     const surface = ctx.makeOffscreenSurface(Tile.width, Tile.height)
     if (!surface) return
 
     const canvas = surface.getCanvas()
-
+    console.log(xIdx, yIdx, surface.width(),surface.height(),'surface')
     ctx.pushCanvas(canvas)
 
     this.pageView.drawContent(scale, Tile.width * xIdx, Tile.height * yIdx)

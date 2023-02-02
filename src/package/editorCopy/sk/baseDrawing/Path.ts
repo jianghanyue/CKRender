@@ -1,26 +1,190 @@
-import { SkyBaseLayerView, SkyTextView } from '.'
-import {
-  SkyShapeGroup,
-  SkyBaseShapeLike,
-  SkyFill,
-  SkyFillType,
-  SkyGradientType,
-  SkyShadow,
-  SkyBorder,
-  SkyBorderPosition,
-  SkyBorderOptions,
-  SkyGradient,
-  SkyPatternFillType,
-  SkyGraphicsContextSettings, SkyFile,
-} from '../model'
-import { Rect, degreeToRadian, Disposable } from '../base'
-import sk, { SkCanvas, SkPath, SkShader, SkPaint } from '../util/canvaskit'
-import { convertRadiusToSigma } from '../util/sketch-to-skia'
-import { createPath } from '../util/path'
-import { CacheGetter } from '../util/misc'
+import {degreeToRadian, Disposable, Rect} from "../../../editor/base"
+import {Point} from '../base/Point'
+import sk, {SkCanvas, SkPaint, SkPath, SkShader} from "../../../editor/util/canvaskit"
+import {SkyBaseLayerView, SkyTextView} from "../../../editor/view"
+import {convertRadiusToSigma} from "../../../editor/util/sketch-to-skia"
+import {CurveMode, ShapePath} from "@sketch-hq/sketch-file-format-ts/dist/cjs/types"
+import {CanvasKit} from "canvaskit-wasm"
+import CurvePoint from "./CurvePoint"
+import {CacheGetter} from "../../../editor/util/misc"
+import Layer from "../Layer"
+import {LayerType} from "../../types"
 
-type SkyBasePath = SkyShapeGroup | SkyBaseShapeLike;
-export abstract class SkyBasePathView<T extends SkyBasePath = SkyBasePath> extends SkyBaseLayerView<T> {
+type CornerCalcInfo = {
+  curPoint: Point;
+  preTangent: Point;
+  nextTangent: Point;
+  preHandle: Point;
+  nextHandle: Point;
+};
+
+/**
+ * 另外关于 curvePoint
+ * curveMode 默认 1， 应该表示没有 curve，直来直去
+ *    只有 curveMode = 1 的时候，cornerRadius 才有效
+ * curveMode 2, 表示 control point 是对称的，长度一样
+ * curveMode 4, disconnected, control point 位置随意
+ * curveMode 3, 也是对称，长度可以不一样
+ */
+export function createPath(canvasKit: CanvasKit, points: CurvePoint[], isClosed: boolean) {
+  let hasBegin = false
+
+  const path = new canvasKit.Path()
+  const len = points.length
+  if (len < 2) return
+
+  const cacheCornerCalcInfo: { [k: number]: CornerCalcInfo } = {}
+
+  for (let i = 0; i < len - 1; i++) {
+    _connectTwo(i, i + 1)
+  }
+  if (isClosed) {
+    _connectTwo(len - 1, 0)
+    path.close()
+  }
+
+  function _isCornerRadius(idx: number) {
+    const curvePoint = points[idx]
+    if (!isClosed && (idx === 0 || idx === len - 1)) {
+      return false
+    }
+    return curvePoint.curveMode === CurveMode.Straight && curvePoint.cornerRadius > 0
+  }
+
+  /**
+   * # Notice 1
+   * sketch 可以设置并存储的 corner radius 可能非常大，绘制的时候需要加以限制。
+   * 1.1 如果一个 corner 另外两端都没有 corner，那么 cornerRadius 实际最大值，以两侧较短一侧为准。
+   * 1.2 如果 corner 另外两端也有 corner，那么 cornerRadius 实际最大值，要以较短一侧一半为准。
+   *
+   *
+   * @param idx
+   * @returns
+   */
+  function _getCornerInfo(idx: number): CornerCalcInfo {
+    if (cacheCornerCalcInfo[idx]) {
+      return cacheCornerCalcInfo[idx]
+    }
+    const pre = idx === 0 ? points[len - 1] : points[idx - 1]
+    const cur = points[idx]
+    const next = idx === len - 1 ? points[0] : points[idx + 1]
+
+    let radius = cur.cornerRadius
+
+    // 拿到三个点
+    const prePoint = pre.point // A
+    const curPoint = cur.point // B
+    const nextPoint = next.point // C
+
+    const lenAB = curPoint.distanceTo(prePoint)
+    const lenBC = curPoint.distanceTo(nextPoint)
+
+    // 三点之间的夹角
+    const radian = Point.calcAngleABC(prePoint, curPoint, nextPoint)
+
+    // 计算相切的点距离 curPoint 的距离， 在 radian 为 90 deg 的时候和 radius 相等。
+    const tangent = Math.tan(radian / 2)
+    let dist = radius / tangent
+
+    // 校准 dist，用户设置的 cornerRadius 可能太大，而实际显示 cornerRadius 受到 AB BC 两边长度限制。
+    // 如果 B C 端点设置了 cornerRadius，可用长度减半
+    const minDist = Math.min(
+      pre.curveMode === CurveMode.Straight && pre.cornerRadius > 0 ? lenAB / 2 : lenAB,
+      next.curveMode === CurveMode.Straight && next.cornerRadius > 0 ? lenBC / 2 : lenBC
+    )
+
+    if (dist > minDist) {
+      dist = minDist
+      radius = dist * tangent
+    }
+
+    // 方向向量
+    const vPre = prePoint.minus(curPoint).norm()
+    const vNext = nextPoint.minus(curPoint).norm()
+
+    // 相切的点
+    const preTangent = vPre.multiply(dist).add(curPoint)
+    const nextTangent = vNext.multiply(dist).add(curPoint)
+
+    // 计算 cubic handler 位置
+    const kappa = (4 / 3) * Math.tan((Math.PI - radian) / 4)
+
+    const preHandle = vPre.multiply(-radius * kappa).add(preTangent)
+    const nextHandle = vNext.multiply(-radius * kappa).add(nextTangent)
+
+    cacheCornerCalcInfo[idx] = {
+      curPoint,
+      preTangent,
+      nextTangent,
+      preHandle,
+      nextHandle,
+    }
+
+    return cacheCornerCalcInfo[idx]
+  }
+
+  // #####
+  // curveFrom: 表示作为 from 点的时候的控制点
+  // curveTo: 表示作为 to 点的时候的控制点
+  // #####
+  function _connectTwo(fromIdx: number, toIdx: number) {
+    let startPt: Point
+    let startHandle: Point | undefined
+
+    let endPt: Point
+    let endHandle: Point | undefined
+
+    // 获取起始点信息
+    if (_isCornerRadius(fromIdx)) {
+      const { nextTangent } = _getCornerInfo(fromIdx)
+
+      startPt = nextTangent
+    } else {
+      const fromCurvePoint = points[fromIdx]
+      startPt = fromCurvePoint.point
+      startHandle = fromCurvePoint.hasCurveFrom ? fromCurvePoint.curveFrom : undefined
+    }
+
+    if (!hasBegin) {
+      hasBegin = true
+      path.moveTo(startPt.x, startPt.y)
+    }
+
+    // 获取终点信息
+    if (_isCornerRadius(toIdx)) {
+      const { preTangent } = _getCornerInfo(toIdx)
+      endPt = preTangent
+    } else {
+      const toCurvePoint = points[toIdx]
+      endPt = toCurvePoint.point
+      endHandle = toCurvePoint.hasCurveTo ? toCurvePoint.curveTo : undefined
+    }
+
+    // 根据有没有 handle 选择 cubic 或者 line 连接
+    if (startHandle || endHandle) {
+      path.cubicTo(
+        startHandle?.x ?? startPt?.x,
+        startHandle?.y ?? startPt.y,
+        endHandle?.x ?? endPt.x,
+        endHandle?.y ?? endPt.y,
+        endPt.x,
+        endPt.y
+      )
+    } else {
+      path.lineTo(endPt.x, endPt.y)
+    }
+
+    // 如果 end 的时候是 corner，绘制圆角
+    if (_isCornerRadius(toIdx)) {
+      const { nextTangent, preHandle, nextHandle } = _getCornerInfo(toIdx)
+      path.cubicTo(preHandle.x, preHandle.y, nextHandle.x, nextHandle.y, nextTangent.x, nextTangent.y)
+    }
+  }
+
+  return path
+}
+
+export abstract class SkyBasePathView<T extends LayerType> extends Layer {
   declare children: (SkyShapePathLikeView | SkyTextView)[]
   path?: SkPath
   _painter?: PathPainter
@@ -29,9 +193,10 @@ export abstract class SkyBasePathView<T extends SkyBasePath = SkyBasePath> exten
   scaleOffsetY = 0
 
   private _appliedSymbolScale = false
+  intrinsicFrame: any
 
-  constructor(model: T) {
-    super(model)
+  constructor(options: T) {
+    super(options)
 
     this.path = this.createPath()
   }
@@ -45,7 +210,7 @@ export abstract class SkyBasePathView<T extends SkyBasePath = SkyBasePath> exten
   @CacheGetter<SkyBaseLayerView>((ins) => ins.layerUpdateId)
   get pathWithTransform() {
     const intrinsicFrame = this.intrinsicFrame
-    const { rotation, isFlippedHorizontal, isFlippedVertical } = this.model
+    const { rotation, isFlippedHorizontal, isFlippedVertical } = this.options
     if (rotation || isFlippedHorizontal || isFlippedVertical) {
       const flipX = isFlippedHorizontal ? -1 : 1
       const flipY = isFlippedVertical ? -1 : 1
@@ -68,61 +233,61 @@ export abstract class SkyBasePathView<T extends SkyBasePath = SkyBasePath> exten
   /**
    * shape 需要矢量拉伸，以确保 border 不变形
    */
-  private applySymbolScale() {
-    const info = this.calcInstanceChildScale()
-    if (info) {
-      const { scaleX, scaleY } = info
-      const { rotation, isFlippedHorizontal, isFlippedVertical } = this.model
+  // private applySymbolScale() {
+  //   const info = this.calcInstanceChildScale()
+  //   if (info) {
+  //     const { scaleX, scaleY } = info
+  //     const { rotation, isFlippedHorizontal, isFlippedVertical } = this.model
+  //
+  //     const flipX = isFlippedHorizontal ? -1 : 1
+  //     const flipY = isFlippedVertical ? -1 : 1
+  //
+  //     // flipX * flipY
+  //     const radian = -1 * degreeToRadian(rotation)
+  //
+  //     const intrinsicFrame = this.intrinsicFrame
+  //
+  //     // 计算出 scale 前 shape 受 rotate、flip 影响后的真实的 bounds
+  //
+  //     let transformedBounds = intrinsicFrame
+  //     const { pathWithTransform } = this
+  //     if (pathWithTransform) {
+  //       transformedBounds = Rect.fromSk(pathWithTransform.getBounds())
+  //     }
+  //
+  //     const transform = sk.CanvasKit.Matrix.multiply(
+  //       // sk.CanvasKit.Matrix.identity(),
+  //       sk.CanvasKit.Matrix.scaled(scaleX * flipX, scaleY * flipY),
+  //       sk.CanvasKit.Matrix.rotated(radian)
+  //     )
+  //     this.path = this.path?.transform(transform)
+  //
+  //     const bounds = this.path?.getBounds()
+  //
+  //     const newFrame = bounds ? Rect.fromSk(bounds) : this.intrinsicFrame
+  //
+  //     const { newX, newY } = this.calcOffsetAfterScale(newFrame, transformedBounds)
+  //
+  //     // 完全重新计算偏移，这里 offset 实际上不是修正，而是 lef top 的 position
+  //     this.scaleOffsetX = newX - newFrame.x
+  //     this.scaleOffsetY = newY - newFrame.y
+  //
+  //     this.scaledFrame = newFrame
+  //
+  //     this._appliedSymbolScale = true
+  //   } else {
+  //     this._appliedSymbolScale = false
+  //   }
+  // }
 
-      const flipX = isFlippedHorizontal ? -1 : 1
-      const flipY = isFlippedVertical ? -1 : 1
-
-      // flipX * flipY
-      const radian = -1 * degreeToRadian(rotation)
-
-      const intrinsicFrame = this.intrinsicFrame
-
-      // 计算出 scale 前 shape 受 rotate、flip 影响后的真实的 bounds
-
-      let transformedBounds = intrinsicFrame
-      const { pathWithTransform } = this
-      if (pathWithTransform) {
-        transformedBounds = Rect.fromSk(pathWithTransform.getBounds())
-      }
-
-      const transform = sk.CanvasKit.Matrix.multiply(
-        // sk.CanvasKit.Matrix.identity(),
-        sk.CanvasKit.Matrix.scaled(scaleX * flipX, scaleY * flipY),
-        sk.CanvasKit.Matrix.rotated(radian)
-      )
-      this.path = this.path?.transform(transform)
-
-      const bounds = this.path?.getBounds()
-
-      const newFrame = bounds ? Rect.fromSk(bounds) : this.intrinsicFrame
-
-      const { newX, newY } = this.calcOffsetAfterScale(newFrame, transformedBounds)
-
-      // 完全重新计算偏移，这里 offset 实际上不是修正，而是 lef top 的 position
-      this.scaleOffsetX = newX - newFrame.x
-      this.scaleOffsetY = newY - newFrame.y
-
-      this.scaledFrame = newFrame
-
-      this._appliedSymbolScale = true
-    } else {
-      this._appliedSymbolScale = false
-    }
-  }
-
-  @CacheGetter<SkyBaseLayerView>((ins) => ins.layerUpdateId)
-  get renderFrame() {
-    // 在没有应用 stroke/shadow/blur 扩散时的 frame
-    // 这里都将转换到自身应用了 transform 的情况。
-    // scaledFrame 中 x，y 没有放在 transform 中。 而 intrinsicFrame 的则放在了  transform 中。
-    const rawFrame = this._appliedSymbolScale ? this.scaledFrame! : this.intrinsicFrame.onlySize
-    return this.model.inflateFrame(rawFrame)
-  }
+  // @CacheGetter<SkyBaseLayerView>((ins) => ins.layerUpdateId)
+  // get renderFrame() {
+  //   // 在没有应用 stroke/shadow/blur 扩散时的 frame
+  //   // 这里都将转换到自身应用了 transform 的情况。
+  //   // scaledFrame 中 x，y 没有放在 transform 中。 而 intrinsicFrame 的则放在了  transform 中。
+  //   const rawFrame = this._appliedSymbolScale ? this.scaledFrame! : this.intrinsicFrame.onlySize
+  //   return this.model.inflateFrame(rawFrame)
+  // }
 
   @CacheGetter<SkyBaseLayerView>((ins) => ins.layerUpdateId)
   get svgBuildInfo() {
@@ -145,9 +310,9 @@ export abstract class SkyBasePathView<T extends SkyBasePath = SkyBasePath> exten
 
   layoutSelf() {
     // shapeGroup 下的 children 不需要
-    if (!(this.parent instanceof SkyShapeGroupView)) {
-      this.applySymbolScale()
-    }
+    // if (!(this.parent instanceof SkyShapeGroupView)) {
+      // this.applySymbolScale()
+    // }
   }
 
   _render() {
@@ -158,59 +323,17 @@ export abstract class SkyBasePathView<T extends SkyBasePath = SkyBasePath> exten
     this._painter.paint()
   }
 
-  _tryClip() {
-    const { skCanvas } = this.ctx
-    if (this.path) {
-      skCanvas.clipPath(this.path, sk.CanvasKit.ClipOp.Intersect, true)
-    }
-  }
+  // _tryClip() {
+  //   const { skCanvas } = this.ctx
+  //   if (this.path) {
+  //     skCanvas.clipPath(this.path, sk.CanvasKit.ClipOp.Intersect, true)
+  //   }
+  // }
 }
 
-export class SkyShapeGroupView extends SkyBasePathView<SkyShapeGroup> {
-  declare children: (SkyShapePathLikeView | SkyTextView)[]
-  declare path?: SkPath
-
-  /**
-   * combine children
-   */
+export class SkyShapePathLikeView extends SkyBasePathView<ShapePath> {
   protected createPath() {
-    if (!this.children.length) return
-
-    const firstChild = this.children[0]
-    let ret = firstChild.pathWithTransform
-    if (this.children.length === 1) return ret
-
-    if (!ret) return
-
-    ret = ret.copy()
-    // const { frame } = firstChild;
-    // ret.offset(frame.x, frame.y);
-
-    this.children.slice(1).reduce((resultPath: SkPath | undefined, child: SkyShapePathLikeView | SkyTextView) => {
-      const opPath = child.pathWithTransform
-      // const { frame } = child;
-
-      // 如果有一个无法转换成 path 就暂停
-      if (!resultPath || !opPath) return undefined
-
-      // opPath.offset(frame.x, frame.y);
-      // try {
-      resultPath.op(opPath, child.model.booleanOperation)
-      // } catch (err) {
-      //   console.log('>?>>>', err);
-      // }
-      // switch()
-      return resultPath
-    }, ret)
-
-    return ret
-  }
-}
-
-export class SkyShapePathLikeView extends SkyBasePathView<SkyBaseShapeLike> {
-  protected createPath() {
-    console.log(this.model)
-    return createPath(this.model.points, this.model.isClosed)
+    return createPath(this.canvasKit,this.model.points, this.model.isClosed)
   }
 }
 
@@ -221,7 +344,7 @@ export class PathPainter extends Disposable {
   // 一个 calculated 的状态，没太大用。
   private hasFill = false
 
-  constructor(private view: SkyBasePathView | SkyTextView) {
+  constructor(private view: SkyBasePathView<any> | SkyTextView) {
     super()
     this.calcShadowPath()
     this.calcPaintInfo()

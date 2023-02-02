@@ -1,8 +1,11 @@
+// import {Image as SKImage} from "@skeditor/canvaskit-wasm"
+
 type LinkNode<T> = {
   next?: LinkNode<T>;
   pre?: LinkNode<T>;
   val?: T;
   key?: string;
+  // img?: Image
 };
 
 export class LruCache<T> {
@@ -26,7 +29,17 @@ export class LruCache<T> {
       return
     }
     this.size++
-    const node = { pre: this.head, next: this.head.next, val: v, key: k }
+    // const img = new Image()
+    // const base64 = 'data:image/png;base64,' + window.btoa(String.fromCharCode(...new Uint8Array((v as SKImage).encodeToBytes() as Uint8Array)))
+    // img.src = base64
+    const node = {
+      pre: this.head,
+      next: this.head.next,
+      val: v,
+      key: k,
+      // img
+    }
+
 
     this._fitNode(node)
 

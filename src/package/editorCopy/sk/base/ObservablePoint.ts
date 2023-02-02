@@ -1,4 +1,4 @@
-import type { IPoint, IPointData } from './common'
+import type { IPoint, IPointData } from './Common'
 
 /**
  * The ObservablePoint object represents a location in a two-dimensional coordinate system, where `x` represents

@@ -14,7 +14,7 @@ export class SkyPageView extends SkyBaseGroupView<SkyPage> {
   name = 'page'
   _picture?: SkPicture
 
-  private enableTile = true
+  enableTile = true
 
   private tileManager: TileManager
 
@@ -103,8 +103,10 @@ export class SkyPageView extends SkyBaseGroupView<SkyPage> {
     this.renderBg()
     if (this.enableTile) {
       this.renderTiles()
+      console.info('瓦片缓存')
     } else {
       super.render()
+      console.info('正常渲染')
     }
   }
 
@@ -133,7 +135,7 @@ export class SkyPageView extends SkyBaseGroupView<SkyPage> {
     const { skCanvas, dpi } = this.ctx
 
     const translate = this.transform.position
-
+    console.log(this.transform.scale.x,'renderTiles')
     let viewport = this.ctx.frame
 
     // page 的 viewport ， 像素单位的

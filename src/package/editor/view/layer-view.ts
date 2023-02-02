@@ -448,7 +448,7 @@ export abstract class SkyBaseLayerView<T extends SkyBaseLayer = SkyBaseLayer> ex
     skCanvas.save()
 
     this.applyTransform()
-
+    // console.log(this.renderFrame,'this.renderFrame')
     const reject = skCanvas.quickReject(this.renderFrame.toSk())
 
     const shouldRender = !this.canQuickReject || !reject

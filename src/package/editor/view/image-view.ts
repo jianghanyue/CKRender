@@ -10,6 +10,7 @@ export class SkyBitmapView extends SkyBaseLayerView<SkyBitmap> {
   _render() {
     const skImg = this.model.file?.skImage
     const frame = this.frame
+    // console.log(skImg,'skImg')
     if (!skImg) return
 
     const { skCanvas } = this.ctx

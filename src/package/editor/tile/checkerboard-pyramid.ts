@@ -33,6 +33,7 @@ export class CheckerboardPyramid {
     } else {
       this.idealCheckerboard = this.ensureCheckerboardExist(idealScale)
     }
+    console.log(this.idealCheckerboard,this.tileManager.ctx.pageView?.transform,'this.idealCheckerboard')
   }
 
   private ensureCheckerboardExist(scale: number) {

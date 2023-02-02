@@ -92,7 +92,7 @@ export class Checkerboard {
 
     // 先算出来，在当前 scale 下需要绘制哪些 tile
     const viewTileBounds = new TileBounds().fromRect(viewport)
-    //
+
     const { left, top, right, bottom } = viewTileBounds
     const contentTileBounds = this.tileManager.getContentTileBounds(this.scale)
     for (let y = top; y < bottom; y++) {
